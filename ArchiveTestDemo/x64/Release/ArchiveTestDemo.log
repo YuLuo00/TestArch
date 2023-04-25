@@ -1,0 +1,9 @@
+﻿  源.cpp
+C:\Users\Administrator\Desktop\ArchiveTestDemo-master\ArchiveTestDemo\源.cpp(68,34): warning C4244: “=”: 从“la_ssize_t”转换到“int”，可能丢失数据
+C:\Users\Administrator\Desktop\ArchiveTestDemo-master\ArchiveTestDemo\源.cpp(86,13): warning C4326: “main”的返回类型应为“int”而非“void”
+  正在生成代码
+  1 of 15 functions ( 6.7%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    1 functions had inline decision re-evaluated but remain unchanged
+  已完成代码的生成
+  ArchiveTestDemo.vcxproj -> C:\Users\Administrator\Desktop\ArchiveTestDemo-master\x64\Release\ArchiveTestDemo.exe
