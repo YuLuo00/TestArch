@@ -19,7 +19,7 @@ int example_unpress()
     a = archive_read_new();
     r = archive_read_support_format_all(a);
     r = archive_read_support_filter_all(a);
-    archive_read_set_options(a, "7zip:use_cryptography_extension=1");
+    //archive_read_set_options(a, "7zip:use_cryptography_extension=1");
     if (r != ARCHIVE_OK) {
         exit(1);
     }
