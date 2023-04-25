@@ -1,6 +1,9 @@
 #include <archive.h>
 #include <archive_entry.h>
 
+#include <Windows.h>
+#include <io.h>
+#include <fcntl.h>
 #include <iostream>
 using namespace std;
 
@@ -9,10 +12,11 @@ using namespace std;
 
 int example_unpress()
 {
+    auto loc = setlocale(LC_ALL, "zh_US.utf8");
     struct archive *a;
     struct archive_entry *entry;
     int r;
-    const char *password = "key"; // 
+    const char *password = "key\0"; // 
 
     const char *filePath = R"(Desktop.rar)";
 
@@ -52,27 +56,31 @@ int example_unpress()
 
         format = archive_format_name(a);
         // 获取文件名
-        const char *filename = archive_entry_pathname(entry); //;"tmp"
+        //const wchar_t* wfileName = archive_entry_pathname_utf8
+        LPCWSTR filename = archive_entry_pathname_w(entry); //;"tmp"
         if (filename == nullptr) {
             break;
         }
         cout << "Extracting: " << filename << endl;
         // 打开文件并写入解压数据
-        FILE* file = NULL;
-        fopen_s(&file, filename, "wb");
-        if (!file) {
-            cout << "Error opening file." << endl;
-            return 1;
+        auto file = CreateFile(filename, GENERIC_WRITE, 1, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (file == INVALID_HANDLE_VALUE) {
+            break;
         }
-        while (1) {
-            r = archive_read_data(a, buff, size);
-            if (r <= 0) {
-                auto i = archive_error_string(a);
-                break;
-            }
-            fwrite(buff, size, 1, file);
+        int fileDescriptor = _open_osfhandle(reinterpret_cast<intptr_t>(file), _O_WRONLY | _O_TEXT);
+        if (fileDescriptor == -1) {
+            break;
         }
-        fclose(file);
+
+        r = archive_read_data_into_fd(a, fileDescriptor);
+        if (r < 0) {
+            auto i = archive_error_string(a);
+            break;
+        }
+
+        if (CloseHandle(file) == 0) {
+            break;
+        }
     }
     delete[]buff;
 
