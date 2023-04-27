@@ -1,0 +1,322 @@
+#include <archive.h>
+#include <archive_entry.h>
+
+#include <iostream>
+#include <fstream>
+#include <corecrt_wstring.h>
+#include <string>
+#include <locale>
+#include <codecvt>
+#include <Windows.h>
+#include <io.h>
+#include <fcntl.h>
+#include <string>
+using namespace std;
+
+
+int example_unpress();
+static void
+extract(const char *filename, int flags);
+void main()
+{
+    // example_unpress();
+    //extract(, 1, 1);
+
+    const char *filename = "Desktop.zip";
+    int compress, flags, mode, opt;
+
+    mode = 'x';
+    compress = '\0';
+    flags = ARCHIVE_EXTRACT_TIME;
+    flags |= ARCHIVE_EXTRACT_PERM;
+    flags |= ARCHIVE_EXTRACT_ACL;
+    flags |= ARCHIVE_EXTRACT_FFLAGS;
+
+    //extract(filename, 0, flags);
+
+    extract(filename, flags);
+
+}
+
+static int
+copy_data(struct archive *ar, struct archive *aw)
+{
+    int r;
+    const void *buff;
+    size_t size;
+#if ARCHIVE_VERSION_NUMBER >= 3000000
+    int64_t offset;
+#else
+    off_t offset;
+#endif
+
+    for (;;) {
+        r = archive_read_data_block(ar, &buff, &size, &offset);
+        if (r == ARCHIVE_EOF)
+            return (ARCHIVE_OK);
+        if (r != ARCHIVE_OK)
+            return (r);
+        r = archive_write_data_block(aw, buff, size, offset);
+        if (r != ARCHIVE_OK) {
+            auto i = archive_error_string(aw);
+            return (r);
+        }
+    }
+}
+std::wstring StrToWstr(const std::string& str)
+{
+    std::wstring res;
+    int len = MultiByteToWideChar(CP_ACP, 0, str.c_str(), static_cast<int>(str.size()), nullptr, 0);
+    if (len <= 0) {
+        return res;
+    }
+
+    std::unique_ptr<wchar_t[]> buffer = std::make_unique<wchar_t[]>(len + 1);
+    if (buffer == nullptr) {
+        return res;
+    }
+
+    len = MultiByteToWideChar(CP_ACP, 0, str.c_str(), static_cast<int>(str.size()), buffer._Myptr(), len);
+    buffer[len] = '\0';
+    res.append(buffer.get());
+
+    return res;
+}
+
+std::string WstrToStr(const std::wstring& str)
+{
+    std::string res;
+    // 获取缓冲区的大小，并申请空间，缓冲区大小是按字节计算的
+    int len = WideCharToMultiByte(CP_ACP, 0, str.c_str(), static_cast<int>(str.size()), NULL, 0, NULL, NULL);
+    if (len == 0) {
+        return res;
+    }
+
+    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(len + 1);
+    if (buffer == nullptr) {
+        return res;
+    }
+
+    WideCharToMultiByte(CP_ACP, 0, str.c_str(), static_cast<int>(str.size()), buffer._Myptr(), len, NULL, NULL);
+    buffer[len] = '\0';
+    // 删除缓冲区并返回值
+    res.append(buffer.get());
+
+    return res;
+}
+
+void gbkToUtf8(wstring gbk)
+{
+    wstring_convert<codecvt_utf8<wchar_t>> cov;
+    string utf8 = cov.to_bytes(L"");
+}
+
+const char *pass_cb(struct archive *, void *_client_data)
+{
+    string i = (char*)_client_data;
+    return "密码";
+}
+
+static void
+extract(const char *filename, int flags)
+{
+    struct archive *a;
+    struct archive *ext;
+    struct archive_entry *entry;
+    int r;
+
+    a = archive_read_new();
+    ext = archive_write_disk_new();
+    archive_write_disk_set_options(ext, flags);
+    /*
+     * Note: archive_write_disk_set_standard_lookup() is useful
+     * here, but it requires library routines that can add 500k or
+     * more to a static executable.
+     */
+    archive_read_support_format_all(a);
+    /*
+     * On my system, enabling other archive formats adds 20k-30k
+     * each.  Enabling gzip decompression adds about 20k.
+     * Enabling bzip2 is more expensive because the libbz2 library
+     * isn't very well factored.
+    */
+
+    if (archive_read_add_passphrase(a, "密码erre") != ARCHIVE_OK) {
+        auto i = archive_error_string(a);
+        printf("Error adding passphrase: %s\n", i);
+    }
+    const char *flagmsg = "error pass flag ";
+    archive_read_set_passphrase_callback(a, (void*)flagmsg, pass_cb);
+
+    if (filename != NULL && strcmp(filename, "-") == 0)
+        filename = NULL;
+    if ((r = archive_read_open_filename(a, filename, 10240))) {
+        auto i = archive_error_string(a);
+        cout<<i;
+    }
+            
+    for (;;) {
+        r = archive_read_next_header(a, &entry);
+        if (r == ARCHIVE_EOF)
+            break;
+        if (r != ARCHIVE_OK) {
+            auto i = archive_error_string(a);
+            cout<<i;
+        }
+
+        r = archive_write_header(ext, entry);
+        if (r != ARCHIVE_OK) {
+            auto i = archive_error_string(ext);
+            cout<<i;
+        }
+        else {
+            copy_data(a, ext);
+            r = archive_write_finish_entry(ext);
+            if (r != ARCHIVE_OK) {
+                auto i = archive_error_string(ext);
+                cout<<i;
+            }
+        }
+
+        //if (verbose || !do_extract)
+        //    msg("\n");
+    }
+    archive_read_close(a);
+    archive_read_free(a);
+
+    archive_write_close(ext);
+    archive_write_free(ext);
+}
+
+
+int example_unpress()
+{
+
+    //auto setRet = setlocale(LC_ALL, "Chinese");
+    auto setRet = setlocale(LC_ALL, "zh_US.utf8");
+    struct archive *a;
+    struct archive_entry *entry;
+    int r;
+
+    string st = "123"; // 密码
+    const char *filePath = R"(Desktop.zip)";
+
+    a = archive_read_new();
+    r = archive_read_support_format_all(a);
+    r = archive_read_support_filter_all(a);
+    if (r != ARCHIVE_OK) {
+        //exit(1);
+    }
+
+    const char *format = NULL;
+
+    
+    if (archive_read_add_passphrase(a, st.c_str()) != ARCHIVE_OK) {
+        auto i = archive_error_string(a);
+        printf("Error adding passphrase: %s\n", i);
+        return 1;
+    }
+    //typedef const char *archive_passphrase_callback(struct archive *, void *_client_data);
+    //archive_read_set_passphrase_callback(a, );
+    //ReadPasswordCallback
+    //archive_read_set_
+    r = archive_read_open_filename(a, filePath, 500 * 1240); //            test.zip        
+    if (r != ARCHIVE_OK) {
+        auto errInfo = archive_error_string(a);
+        cout << "Error opening compressed file." << endl;
+        return 1;
+    }
+
+    bool is_encrypted = archive_read_has_encrypted_entries(a);
+
+    int size = 1024 * 1024;
+    char *buff = new char[size];
+    int index = 0;
+    while (1) {
+        index++;
+        r = archive_read_next_header(a, &entry);
+        if (r == 0 || r == ARCHIVE_EOF) {
+            break;
+        }
+        if (r < ARCHIVE_OK) {
+            auto i = archive_error_string(a);
+            break;
+        }
+        
+        format = archive_format_name(a);
+ 
+        LPCWSTR filename = archive_entry_pathname_w(entry); //;"tmp"
+        if (filename == nullptr) {
+            break;
+        }
+        cout << "Extracting: " << filename << endl;
+
+        auto file = CreateFileW(filename, GENERIC_WRITE, 1, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        //HANDLE file = CreateFile(filename, GENERIC_WRITE, 0, NULL,CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        int fd = _open_osfhandle(reinterpret_cast<intptr_t>(file), _O_WRONLY | _O_TEXT);
+        //file.open();
+        //if (!file.is_open()) {
+        //    return -1;
+        //}
+        if (!file) {
+            cout << "Error opening file." << endl;
+            return 1;
+        }
+        while (1) {
+            r = archive_read_extract(a, entry, ARCHIVE_EXTRACT_ACL);
+            //r = archive_read_data(a, buff, size);
+  /*          r = archive_read_data_into_fd(a, fd);
+            FILE f;
+            archive_write_open_FILE(a, &f);*/
+            //WriteFile()
+            //WriteFile()
+            if (r < 0) {
+                auto i = archive_error_string(a);
+                break;
+            }
+            //file.write(buff, r);
+        }
+        if (CloseHandle(file) == 0) {
+            break;
+        }
+    }
+    //delete[]buff;
+    //char* dest_file;
+
+    //for (;;) {
+    //    r = archive_read_next_header(a, &entry);
+    //    if (r == ARCHIVE_EOF)
+    //        break;
+    //    if (r < ARCHIVE_OK)
+    //        fprintf(stderr, "%s\n", archive_error_string(a));
+    //    if (r < ARCHIVE_WARN)
+    //        return NULL;
+
+    //    asprintf(&dest_file, "%s/%s", temp_dir, archive_entry_pathname(entry));
+    //    archive_entry_set_pathname(entry, dest_file);
+    //    // printf(" writing %s\n", dest_file);
+
+    //    r = archive_write_header(ext, entry);
+    //    if (r < ARCHIVE_OK)
+    //        fprintf(stderr, "%s\n", archive_error_string(ext));
+    //    else if (archive_entry_size(entry) > 0) {
+    //        r = copy_data(a, ext);
+    //        if (r < ARCHIVE_OK)
+    //            fprintf(stderr, "%s\n", archive_error_string(ext));
+    //        if (r < ARCHIVE_WARN)
+    //            exit(1);
+    //    }
+    //    r = archive_write_finish_entry(ext);
+    //    if (r < ARCHIVE_OK)
+    //        fprintf(stderr, "%s\n", archive_error_string(ext));
+    //    if (r < ARCHIVE_WARN)
+    //        return NULL;
+
+    //    free(dest_file);
+    //}
+
+    archive_read_close(a);
+    archive_read_free(a);
+
+    return 0;
+}
