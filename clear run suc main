@@ -1,0 +1,111 @@
+#include <archive.h>
+#include <archive_entry.h>
+
+#include <iostream>
+using namespace std;
+
+static void
+extract(const char *filename, int flags);
+void main()
+{
+    const char *filename = "Desktop.zip";
+    int flags;
+    flags = ARCHIVE_EXTRACT_TIME;
+    flags |= ARCHIVE_EXTRACT_PERM;
+    flags |= ARCHIVE_EXTRACT_ACL;
+    flags |= ARCHIVE_EXTRACT_FFLAGS;
+
+    extract(filename, flags);
+}
+
+static int
+copy_data(struct archive *ar, struct archive *aw)
+{
+    int r;
+    const void *buff;
+    size_t size;
+#if ARCHIVE_VERSION_NUMBER >= 3000000
+    int64_t offset;
+#else
+    off_t offset;
+#endif
+
+    for (;;) {
+        r = archive_read_data_block(ar, &buff, &size, &offset);
+        if (r == ARCHIVE_EOF)
+            return (ARCHIVE_OK);
+        if (r != ARCHIVE_OK) {
+            auto i = archive_error_string(ar);
+            cout << i;
+        }
+        r = archive_write_data_block(aw, buff, size, offset);
+        if (r != ARCHIVE_OK) {
+            auto i = archive_error_string(aw);
+            return (r);
+        }
+    }
+}
+
+const char *pass_cb(struct archive *, void *_client_data)
+{
+    string i = (char*)_client_data;
+    return "密码";
+}
+
+static void
+extract(const char *filename, int flags)
+{
+    struct archive *a;
+    struct archive *ext;
+    struct archive_entry *entry;
+    int r;
+
+    a = archive_read_new();
+    archive_read_support_format_all(a);
+
+    ext = archive_write_disk_new();
+    archive_write_disk_set_options(ext, flags);
+
+    if (archive_read_add_passphrase(a, "密码erre") != ARCHIVE_OK) {
+        auto i = archive_error_string(a);
+        printf("Error adding passphrase: %s\n", i);
+    }
+    const char *flagmsg = "error pass flag ";
+    archive_read_set_passphrase_callback(a, (void*)flagmsg, pass_cb);
+
+    if (filename != NULL && strcmp(filename, "-") == 0)
+        filename = NULL;
+    if ((r = archive_read_open_filename(a, filename, 10240))) {
+        auto i = archive_error_string(a);
+        cout<<i;
+    }
+            
+    for (;;) {
+        r = archive_read_next_header(a, &entry);
+        if (r == ARCHIVE_EOF)
+            break;
+        if (r != ARCHIVE_OK) {
+            auto i = archive_error_string(a);
+            cout<<i;
+        }
+
+        r = archive_write_header(ext, entry);
+        if (r != ARCHIVE_OK) {
+            auto i = archive_error_string(ext);
+            cout<<i;
+        }
+        else {
+            copy_data(a, ext);
+            r = archive_write_finish_entry(ext);
+            if (r != ARCHIVE_OK) {
+                auto i = archive_error_string(ext);
+                cout<<i;
+            }
+        }
+    }
+    archive_read_close(a);
+    archive_read_free(a);
+
+    archive_write_close(ext);
+    archive_write_free(ext);
+}
